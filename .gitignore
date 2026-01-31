@@ -1,0 +1,50 @@
+# =========== #
+# OS specific #
+# =========== #
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ====================== #
+# Native Plugin (Swift)  #
+# ====================== #
+NativePlugin/**/build-ios/
+NativePlugin/**/.build/
+NativePlugin/**/.swiftpm/
+NativePlugin/**/Package.resolved
+NativePlugin/**/*.xcodeproj/xcuserdata/
+NativePlugin/**/*.xcworkspace/xcuserdata/
+
+# ============= #
+# Unity meta    #
+# ============= #
+# Keep .meta files - they are important for Unity
+
+# ============ #
+# IDE specific #
+# ============ #
+.vs/
+.idea/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+
+# ============= #
+# Build outputs #
+# ============= #
+[Bb]uild/
+[Bb]uilds/
+
+# =============== #
+# Claude specific #
+# =============== #
+.claude/
+CLAUDE.md
+PLAN.md
