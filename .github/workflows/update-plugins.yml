@@ -1,0 +1,246 @@
+name: Update Native Plugins
+
+on:
+  # 手動トリガー
+  workflow_dispatch:
+    inputs:
+      swift_release:
+        description: 'HaishinKit.swift release tag (empty for latest)'
+        required: false
+        default: ''
+      kotlin_release:
+        description: 'HaishinKit.kt release tag (empty for latest)'
+        required: false
+        default: ''
+
+  # 毎日UTC 0時（JST 9時）にチェック
+  schedule:
+    - cron: '0 0 * * *'
+
+env:
+  SWIFT_REPO: otanl/HaishinKit.swift
+  KOTLIN_REPO: otanl/HaishinKit.kt
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    outputs:
+      swift_updated: ${{ steps.check.outputs.swift_updated }}
+      kotlin_updated: ${{ steps.check.outputs.kotlin_updated }}
+      swift_version: ${{ steps.check.outputs.swift_version }}
+      kotlin_version: ${{ steps.check.outputs.kotlin_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for updates
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get current versions from version file
+          CURRENT_SWIFT=""
+          CURRENT_KOTLIN=""
+          if [ -f ".plugin-versions" ]; then
+            CURRENT_SWIFT=$(grep "swift=" .plugin-versions | cut -d= -f2 || echo "")
+            CURRENT_KOTLIN=$(grep "kotlin=" .plugin-versions | cut -d= -f2 || echo "")
+          fi
+
+          # Get latest releases
+          if [ -n "${{ github.event.inputs.swift_release }}" ]; then
+            LATEST_SWIFT="${{ github.event.inputs.swift_release }}"
+          else
+            LATEST_SWIFT=$(gh release view --repo ${{ env.SWIFT_REPO }} --json tagName -q '.tagName' 2>/dev/null || echo "")
+          fi
+
+          if [ -n "${{ github.event.inputs.kotlin_release }}" ]; then
+            LATEST_KOTLIN="${{ github.event.inputs.kotlin_release }}"
+          else
+            LATEST_KOTLIN=$(gh release view --repo ${{ env.KOTLIN_REPO }} --json tagName -q '.tagName' 2>/dev/null || echo "")
+          fi
+
+          echo "Current Swift: $CURRENT_SWIFT, Latest: $LATEST_SWIFT"
+          echo "Current Kotlin: $CURRENT_KOTLIN, Latest: $LATEST_KOTLIN"
+
+          # Check if updates are needed
+          SWIFT_UPDATED="false"
+          KOTLIN_UPDATED="false"
+
+          if [ -n "$LATEST_SWIFT" ] && [ "$CURRENT_SWIFT" != "$LATEST_SWIFT" ]; then
+            SWIFT_UPDATED="true"
+          fi
+
+          if [ -n "$LATEST_KOTLIN" ] && [ "$CURRENT_KOTLIN" != "$LATEST_KOTLIN" ]; then
+            KOTLIN_UPDATED="true"
+          fi
+
+          echo "swift_updated=$SWIFT_UPDATED" >> $GITHUB_OUTPUT
+          echo "kotlin_updated=$KOTLIN_UPDATED" >> $GITHUB_OUTPUT
+          echo "swift_version=$LATEST_SWIFT" >> $GITHUB_OUTPUT
+          echo "kotlin_version=$LATEST_KOTLIN" >> $GITHUB_OUTPUT
+
+  update-swift-plugins:
+    needs: check-updates
+    if: needs.check-updates.outputs.swift_updated == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Swift artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${{ needs.check-updates.outputs.swift_version }}
+          echo "Downloading HaishinKit.swift $VERSION artifacts..."
+
+          mkdir -p /tmp/swift-artifacts
+          cd /tmp/swift-artifacts
+
+          # Download iOS Framework
+          gh release download "$VERSION" \
+            --repo ${{ env.SWIFT_REPO }} \
+            --pattern "HaishinKitUnity-iOS.framework.zip" \
+            --clobber || echo "iOS framework not found"
+
+          # Download macOS dylib
+          gh release download "$VERSION" \
+            --repo ${{ env.SWIFT_REPO }} \
+            --pattern "libHaishinKitUnity.dylib" \
+            --clobber || echo "macOS dylib not found"
+
+          ls -la
+
+      - name: Update iOS Framework
+        run: |
+          if [ -f "/tmp/swift-artifacts/HaishinKitUnity-iOS.framework.zip" ]; then
+            echo "Updating iOS Framework..."
+            rm -rf UnityProject/Assets/Plugins/iOS/HaishinKitUnity/HaishinKitUnity.framework
+            mkdir -p UnityProject/Assets/Plugins/iOS/HaishinKitUnity
+            unzip -o /tmp/swift-artifacts/HaishinKitUnity-iOS.framework.zip -d UnityProject/Assets/Plugins/iOS/HaishinKitUnity/
+          fi
+
+      - name: Update macOS dylib
+        run: |
+          if [ -f "/tmp/swift-artifacts/libHaishinKitUnity.dylib" ]; then
+            echo "Updating macOS dylib..."
+            cp /tmp/swift-artifacts/libHaishinKitUnity.dylib UnityProject/Assets/Plugins/
+          fi
+
+      - name: Upload Swift artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: swift-plugins
+          path: |
+            UnityProject/Assets/Plugins/iOS/
+            UnityProject/Assets/Plugins/libHaishinKitUnity.dylib
+
+  update-kotlin-plugins:
+    needs: check-updates
+    if: needs.check-updates.outputs.kotlin_updated == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Kotlin artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${{ needs.check-updates.outputs.kotlin_version }}
+          echo "Downloading HaishinKit.kt $VERSION artifacts..."
+
+          mkdir -p /tmp/kotlin-artifacts
+          cd /tmp/kotlin-artifacts
+
+          # Download all AARs
+          gh release download "$VERSION" \
+            --repo ${{ env.KOTLIN_REPO }} \
+            --pattern "*.aar" \
+            --clobber || echo "AAR files not found"
+
+          ls -la
+
+      - name: Update Android AARs
+        run: |
+          mkdir -p UnityProject/Assets/Plugins/Android
+
+          if [ -f "/tmp/kotlin-artifacts/HaishinKitUnity.aar" ]; then
+            cp /tmp/kotlin-artifacts/HaishinKitUnity.aar UnityProject/Assets/Plugins/Android/
+          fi
+
+          if [ -f "/tmp/kotlin-artifacts/haishinkit.aar" ]; then
+            cp /tmp/kotlin-artifacts/haishinkit.aar UnityProject/Assets/Plugins/Android/
+          fi
+
+          if [ -f "/tmp/kotlin-artifacts/rtmp.aar" ]; then
+            cp /tmp/kotlin-artifacts/rtmp.aar UnityProject/Assets/Plugins/Android/
+          fi
+
+      - name: Upload Kotlin artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kotlin-plugins
+          path: UnityProject/Assets/Plugins/Android/
+
+  create-pr:
+    needs: [check-updates, update-swift-plugins, update-kotlin-plugins]
+    if: always() && (needs.update-swift-plugins.result == 'success' || needs.update-kotlin-plugins.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Swift plugins
+        if: needs.update-swift-plugins.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: swift-plugins
+          path: UnityProject/Assets/Plugins/
+
+      - name: Download Kotlin plugins
+        if: needs.update-kotlin-plugins.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: kotlin-plugins
+          path: UnityProject/Assets/Plugins/Android/
+
+      - name: Update version file
+        run: |
+          echo "swift=${{ needs.check-updates.outputs.swift_version }}" > .plugin-versions
+          echo "kotlin=${{ needs.check-updates.outputs.kotlin_version }}" >> .plugin-versions
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            Update native plugins
+
+            - HaishinKit.swift: ${{ needs.check-updates.outputs.swift_version }}
+            - HaishinKit.kt: ${{ needs.check-updates.outputs.kotlin_version }}
+          branch: auto-update/plugins
+          delete-branch: true
+          title: "Update native plugins"
+          body: |
+            ## Automated Plugin Update
+
+            This PR updates the native plugins from the upstream releases.
+
+            ### Changes
+            | Platform | Version |
+            |----------|---------|
+            | iOS/macOS (HaishinKit.swift) | `${{ needs.check-updates.outputs.swift_version }}` |
+            | Android (HaishinKit.kt) | `${{ needs.check-updates.outputs.kotlin_version }}` |
+
+            ### Verification Checklist
+            - [ ] iOS build works
+            - [ ] macOS Editor works
+            - [ ] Android build works
+            - [ ] Streaming test passed
+
+            ---
+            *This PR was automatically created by GitHub Actions.*
+          labels: |
+            dependencies
+            automated

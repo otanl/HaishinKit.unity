@@ -1,0 +1,254 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: true
+        default: 'v0.0.0-dev'
+
+jobs:
+  build-ios-macos:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.4'
+
+      - name: Resolve Swift packages
+        working-directory: NativePlugin/HaishinKitUnity
+        run: |
+          swift package resolve
+
+      - name: Build macOS dylib (Universal)
+        working-directory: NativePlugin/HaishinKitUnity
+        run: |
+          swift build -c release --arch arm64 --arch x86_64
+          cp .build/release/libHaishinKitUnity.dylib ../../
+
+      - name: Build iOS Framework
+        working-directory: NativePlugin/HaishinKitUnity
+        run: |
+          xcodebuild -scheme HaishinKitUnity \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+            SKIP_INSTALL=NO \
+            -derivedDataPath build-ios \
+            2>&1 | tail -50
+
+          # Find and copy the framework
+          FRAMEWORK_PATH=$(find build-ios -name "HaishinKitUnity.framework" -type d | head -1)
+          if [ -n "$FRAMEWORK_PATH" ]; then
+            cp -r "$FRAMEWORK_PATH" ../../
+          else
+            echo "Framework not found!"
+            find build-ios -name "*.framework" -type d
+            exit 1
+          fi
+
+      - name: Package iOS Framework
+        run: |
+          zip -r HaishinKitUnity-iOS.framework.zip HaishinKitUnity.framework
+
+      - name: Upload iOS Framework
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-framework
+          path: HaishinKitUnity-iOS.framework.zip
+
+      - name: Upload macOS dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dylib
+          path: libHaishinKitUnity.dylib
+
+  fetch-android-aars:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch Android AARs from HaishinKit.kt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p android-aars
+
+          # Try to get latest release from HaishinKit.kt
+          LATEST=$(gh release view --repo otanl/HaishinKit.kt --json tagName -q '.tagName' 2>/dev/null || echo "")
+
+          if [ -n "$LATEST" ]; then
+            echo "Downloading HaishinKit.kt $LATEST..."
+            gh release download "$LATEST" \
+              --repo otanl/HaishinKit.kt \
+              --pattern "*.aar" \
+              --dir android-aars \
+              --clobber || echo "No AAR files in release"
+          fi
+
+          # If no release, use existing AARs from repo
+          if [ ! -f "android-aars/HaishinKitUnity.aar" ]; then
+            echo "Using existing AARs from repository..."
+            cp UnityProject/Assets/Plugins/Android/*.aar android-aars/ 2>/dev/null || true
+          fi
+
+          ls -la android-aars/
+
+      - name: Upload Android AARs
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-aars
+          path: android-aars/
+
+  create-release:
+    needs: [build-ios-macos, fetch-android-aars]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download iOS Framework
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-framework
+          path: release-assets/
+
+      - name: Download macOS dylib
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dylib
+          path: release-assets/
+
+      - name: Download Android AARs
+        uses: actions/download-artifact@v4
+        with:
+          name: android-aars
+          path: release-assets/android/
+
+      - name: Package Android AARs
+        run: |
+          cd release-assets
+          zip -r HaishinKitUnity-Android.zip android/
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: HaishinKit.unity ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, 'dev') || contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'beta') }}
+          files: |
+            release-assets/HaishinKitUnity-iOS.framework.zip
+            release-assets/libHaishinKitUnity.dylib
+            release-assets/HaishinKitUnity-Android.zip
+          body: |
+            ## HaishinKit.unity ${{ steps.version.outputs.version }}
+
+            Unity native plugin for RTMP streaming.
+
+            ### Downloads
+
+            | Platform | File | Description |
+            |----------|------|-------------|
+            | iOS | `HaishinKitUnity-iOS.framework.zip` | iOS Framework |
+            | macOS | `libHaishinKitUnity.dylib` | macOS dynamic library |
+            | Android | `HaishinKitUnity-Android.zip` | Android AAR files |
+
+            ### Installation
+
+            1. Download the appropriate files for your target platform
+            2. Extract and copy to `Assets/Plugins/` in your Unity project
+               - iOS: `Assets/Plugins/iOS/HaishinKitUnity/HaishinKitUnity.framework`
+               - macOS: `Assets/Plugins/libHaishinKitUnity.dylib`
+               - Android: `Assets/Plugins/Android/*.aar`
+
+            ### Dependencies
+
+            - HaishinKit.swift: unity-support branch
+            - HaishinKit.kt: unity-support branch
+
+  update-unity-project:
+    needs: [build-ios-macos, fetch-android-aars]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download iOS Framework
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-framework
+          path: /tmp/artifacts/
+
+      - name: Download macOS dylib
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dylib
+          path: /tmp/artifacts/
+
+      - name: Download Android AARs
+        uses: actions/download-artifact@v4
+        with:
+          name: android-aars
+          path: /tmp/artifacts/android/
+
+      - name: Update Unity Plugins
+        run: |
+          # iOS Framework
+          rm -rf UnityProject/Assets/Plugins/iOS/HaishinKitUnity/HaishinKitUnity.framework
+          mkdir -p UnityProject/Assets/Plugins/iOS/HaishinKitUnity
+          unzip -o /tmp/artifacts/HaishinKitUnity-iOS.framework.zip -d UnityProject/Assets/Plugins/iOS/HaishinKitUnity/
+
+          # macOS dylib
+          cp /tmp/artifacts/libHaishinKitUnity.dylib UnityProject/Assets/Plugins/
+
+          # Android AARs
+          mkdir -p UnityProject/Assets/Plugins/Android
+          cp /tmp/artifacts/android/*.aar UnityProject/Assets/Plugins/Android/ 2>/dev/null || true
+
+      - name: Update version file
+        run: |
+          echo "version=${{ github.ref_name }}" > .plugin-versions
+          echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> .plugin-versions
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Update plugins to ${{ github.ref_name }}"
+          branch: release/${{ github.ref_name }}
+          delete-branch: true
+          title: "Release ${{ github.ref_name }}: Update built plugins"
+          body: |
+            ## Release ${{ github.ref_name }}
+
+            This PR updates the pre-built native plugins.
+
+            ### Updated Files
+            - `UnityProject/Assets/Plugins/iOS/HaishinKitUnity/HaishinKitUnity.framework`
+            - `UnityProject/Assets/Plugins/libHaishinKitUnity.dylib`
+            - `UnityProject/Assets/Plugins/Android/*.aar`
+
+            ---
+            *Automatically generated from release workflow.*
