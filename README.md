@@ -1,5 +1,7 @@
 # HaishinKit.unity
 
+> **Note**: This is an unofficial community project. It is not affiliated with or endorsed by the original HaishinKit authors. This project provides Unity bindings for HaishinKit libraries.
+
 Unity plugin for RTMP live streaming, powered by [HaishinKit.swift](https://github.com/shogo4405/HaishinKit.swift) and [HaishinKit.kt](https://github.com/shogo4405/HaishinKit.kt).
 
 Stream Unity's rendered content (RenderTexture) and game audio directly to YouTube Live, Twitch, and other RTMP servers.
@@ -215,5 +217,9 @@ This project uses:
 
 ## Acknowledgments
 
-- [HaishinKit.swift](https://github.com/shogo4405/HaishinKit.swift) - Core streaming library by [@shogo4405](https://github.com/shogo4405)
-- [HaishinKit.kt](https://github.com/shogo4405/HaishinKit.kt) - Android streaming library by [@shogo4405](https://github.com/shogo4405)
+This project would not be possible without the excellent work of [@shogo4405](https://github.com/shogo4405):
+
+- [HaishinKit.swift](https://github.com/shogo4405/HaishinKit.swift) - The core iOS/macOS RTMP/SRT streaming library
+- [HaishinKit.kt](https://github.com/shogo4405/HaishinKit.kt) - The Android RTMP streaming library
+
+All streaming functionality is provided by these libraries. This project only provides Unity bindings and does not modify the core streaming logic.
