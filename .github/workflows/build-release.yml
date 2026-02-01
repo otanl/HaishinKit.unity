@@ -21,17 +21,26 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.2'
+          xcode-version: 'latest-stable'
 
       - name: Check Swift version
         run: |
           swift --version
           xcodebuild -version
 
+      - name: Clean SPM cache
+        run: |
+          rm -rf ~/Library/Caches/org.swift.swiftpm
+          rm -rf ~/Library/Developer/Xcode/DerivedData
+
       - name: Resolve Swift packages
         working-directory: NativePlugin/HaishinKitUnity
         run: |
-          swift package resolve --verbose
+          swift package resolve 2>&1 || {
+            echo "First attempt failed, retrying..."
+            sleep 5
+            swift package resolve
+          }
 
       - name: Build macOS dylib (Universal)
         working-directory: NativePlugin/HaishinKitUnity
