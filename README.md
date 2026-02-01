@@ -17,13 +17,15 @@ Stream Unity's rendered content (RenderTexture) and game audio directly to YouTu
 |----------|--------|
 | iOS | ✅ Supported |
 | macOS | ✅ Supported (Editor & Standalone) |
-| Android | 🚧 Planned |
+| Android | ✅ Supported |
 
 ## Requirements
 
 - Unity 2021.3 or later
 - iOS 15.0+ / macOS 12.0+
-- Xcode 15.0+ (for building native plugin)
+- Android 5.0+ (API 21+)
+- Xcode 15.0+ (for building iOS/macOS native plugin)
+- Android Studio (for building Android plugin)
 
 ## Installation
 

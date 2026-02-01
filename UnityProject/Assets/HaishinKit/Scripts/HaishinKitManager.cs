@@ -30,7 +30,11 @@ namespace HaishinKit
 
         #region Public Properties
 
+#if UNITY_ANDROID && !UNITY_EDITOR
+        public bool IsInitialized => _androidBridge != null;
+#else
         public bool IsInitialized => _nativeInstance != IntPtr.Zero;
+#endif
         public string CurrentStatus { get; private set; } = "";
 
         #endregion
@@ -41,9 +45,15 @@ namespace HaishinKit
         private static StatusCallbackDelegate _statusCallbackDelegate;
         private static GCHandle _callbackHandle;
 
+#if UNITY_ANDROID && !UNITY_EDITOR
+        private AndroidJavaClass _androidBridge;
+        private Texture2D _readbackTexture;
+        private byte[] _pixelBuffer;
+#endif
+
         #endregion
 
-        #region Platform-specific DLL Import
+        #region Platform-specific DLL Import (iOS/macOS)
 
 #if UNITY_IOS && !UNITY_EDITOR
         private const string DllName = "__Internal";
@@ -159,7 +169,60 @@ namespace HaishinKit
 
         private void Initialize()
         {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            InitializeAndroid();
+#elif UNITY_IOS || UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
+            InitializeApple();
+#else
+            Debug.LogWarning("[HaishinKit] This plugin only supports iOS, macOS, and Android");
+#endif
+        }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        private void InitializeAndroid()
+        {
+            try
+            {
+                Debug.Log("[HaishinKit] Starting Android initialization...");
+
+                // Get current activity
+                using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                {
+                    Debug.Log("[HaishinKit] Got UnityPlayer class");
+                    using (var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+                    {
+                        Debug.Log("[HaishinKit] Got currentActivity");
+
+                        // Initialize UnityBridge
+                        _androidBridge = new AndroidJavaClass("com.haishinkit.unity.UnityBridge");
+                        Debug.Log("[HaishinKit] Created UnityBridge class");
+
+                        _androidBridge.CallStatic("initialize", activity);
+                        Debug.Log("[HaishinKit] Called initialize");
+
+                        // Set callback target (this GameObject's name)
+                        _androidBridge.CallStatic("setCallback", gameObject.name, "OnNativeStatusCallback");
+                        Debug.Log($"[HaishinKit] Set callback to {gameObject.name}");
+
+                        // Test: get version
+                        string version = _androidBridge.CallStatic<string>("getVersion");
+                        Debug.Log($"[HaishinKit] Version: {version}");
+                    }
+                }
+
+                Debug.Log("[HaishinKit] Android initialization successful");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[HaishinKit] Android initialization failed: {e.Message}\n{e.StackTrace}");
+                _androidBridge = null;
+            }
+        }
+#endif
+
 #if UNITY_IOS || UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
+        private void InitializeApple()
+        {
             try
             {
                 _nativeInstance = HaishinKit_CreateInstance();
@@ -171,7 +234,7 @@ namespace HaishinKit
                 }
 
                 // Setup callback
-                _statusCallbackDelegate = OnNativeStatusCallback;
+                _statusCallbackDelegate = OnNativeStatusCallbackStatic;
                 _callbackHandle = GCHandle.Alloc(_statusCallbackDelegate);
                 HaishinKit_SetStatusCallback(_nativeInstance, _statusCallbackDelegate);
             }
@@ -187,12 +250,44 @@ namespace HaishinKit
             {
                 Debug.LogError($"[HaishinKit] Initialization failed: {e.GetType().Name} - {e.Message}");
             }
+        }
+#endif
+
+        private void Cleanup()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            CleanupAndroid();
 #else
-            Debug.LogWarning("[HaishinKit] This plugin only supports iOS and macOS");
+            CleanupApple();
 #endif
         }
 
-        private void Cleanup()
+#if UNITY_ANDROID && !UNITY_EDITOR
+        private void CleanupAndroid()
+        {
+            if (_androidBridge != null)
+            {
+                try
+                {
+                    _androidBridge.CallStatic("cleanup");
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"[HaishinKit] Android cleanup failed: {e.Message}");
+                }
+                _androidBridge = null;
+            }
+
+            if (_readbackTexture != null)
+            {
+                Destroy(_readbackTexture);
+                _readbackTexture = null;
+            }
+            _pixelBuffer = null;
+        }
+#endif
+
+        private void CleanupApple()
         {
             if (_nativeInstance != IntPtr.Zero)
             {
@@ -216,10 +311,17 @@ namespace HaishinKit
 
         #region Callback Handler
 
+        // Static callback for iOS/macOS (P/Invoke)
         [MonoPInvokeCallback(typeof(StatusCallbackDelegate))]
-        private static void OnNativeStatusCallback(string status)
+        private static void OnNativeStatusCallbackStatic(string status)
         {
             Instance?.HandleStatusChange(status);
+        }
+
+        // Instance callback for Android (UnitySendMessage)
+        public void OnNativeStatusCallback(string status)
+        {
+            HandleStatusChange(status);
         }
 
         private void HandleStatusChange(string status)
@@ -262,7 +364,10 @@ namespace HaishinKit
         /// </summary>
         public string GetVersion()
         {
-#if UNITY_IOS || UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (_androidBridge == null) return "Not Initialized";
+            return _androidBridge.CallStatic<string>("getVersion");
+#elif UNITY_IOS || UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
             IntPtr ptr = HaishinKit_GetVersion();
             if (ptr == IntPtr.Zero) return "Unknown";
 
@@ -281,13 +386,28 @@ namespace HaishinKit
         /// <param name="streamName">ストリーム名/キー</param>
         public void Connect(string url, string streamName)
         {
+            Debug.Log($"[HaishinKit] Connect called: url={url}, streamName={streamName}, IsInitialized={IsInitialized}");
+
             if (!IsInitialized)
             {
                 Debug.LogError("[HaishinKit] Not initialized");
                 return;
             }
 
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                Debug.Log("[HaishinKit] Calling Android connect...");
+                _androidBridge.CallStatic("connect", url, streamName);
+                Debug.Log("[HaishinKit] Android connect called successfully");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[HaishinKit] Android connect failed: {e.Message}\n{e.StackTrace}");
+            }
+#else
             HaishinKit_Connect(_nativeInstance, url, streamName);
+#endif
         }
 
         /// <summary>
@@ -296,7 +416,12 @@ namespace HaishinKit
         public void Disconnect()
         {
             if (!IsInitialized) return;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _androidBridge.CallStatic("disconnect");
+#else
             HaishinKit_Disconnect(_nativeInstance);
+#endif
         }
 
         #endregion
@@ -314,7 +439,11 @@ namespace HaishinKit
                 return;
             }
 
+#if UNITY_ANDROID && !UNITY_EDITOR
+            Debug.LogWarning("[HaishinKit] StartPublishing is not supported on Android. Use StartPublishingWithTexture instead.");
+#else
             HaishinKit_StartPublishing(_nativeInstance);
+#endif
         }
 
         /// <summary>
@@ -323,7 +452,12 @@ namespace HaishinKit
         public void StopPublishing()
         {
             if (!IsInitialized) return;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _androidBridge.CallStatic("stopPublishing");
+#else
             HaishinKit_StopPublishing(_nativeInstance);
+#endif
         }
 
         /// <summary>
@@ -339,17 +473,56 @@ namespace HaishinKit
                 return;
             }
 
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // Prepare readback texture for Android
+            if (_readbackTexture == null || _readbackTexture.width != width || _readbackTexture.height != height)
+            {
+                if (_readbackTexture != null) Destroy(_readbackTexture);
+                _readbackTexture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+                _pixelBuffer = new byte[width * height * 4];
+            }
+            _androidBridge.CallStatic("startPublishingWithTexture", width, height);
+#else
             HaishinKit_StartPublishingWithTexture(_nativeInstance, width, height);
+#endif
         }
 
         /// <summary>
         /// ビデオフレームを送信
         /// </summary>
-        /// <param name="texturePtr">Metal テクスチャのネイティブポインタ</param>
+        /// <param name="texturePtr">Metal テクスチャのネイティブポインタ (iOS/macOS)</param>
         public void SendVideoFrame(IntPtr texturePtr)
         {
             if (!IsInitialized || texturePtr == IntPtr.Zero) return;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            Debug.LogWarning("[HaishinKit] Use SendVideoFrame(RenderTexture) on Android");
+#else
             HaishinKit_SendVideoFrame(_nativeInstance, texturePtr);
+#endif
+        }
+
+        /// <summary>
+        /// ビデオフレームを送信 (RenderTexture版 - Android用)
+        /// </summary>
+        /// <param name="renderTexture">送信するRenderTexture</param>
+        public void SendVideoFrame(RenderTexture renderTexture)
+        {
+            if (!IsInitialized || renderTexture == null) return;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // Read pixels from RenderTexture
+            RenderTexture.active = renderTexture;
+            _readbackTexture.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0, false);
+            RenderTexture.active = null;
+
+            // Get raw texture data and send to native
+            var rawData = _readbackTexture.GetRawTextureData();
+            _androidBridge.CallStatic("sendVideoFrame", rawData, renderTexture.width, renderTexture.height);
+#else
+            // On iOS/macOS, use the native texture pointer
+            SendVideoFrame(renderTexture.GetNativeTexturePtr());
+#endif
         }
 
         #endregion
@@ -362,7 +535,12 @@ namespace HaishinKit
         public void SetVideoBitrate(int kbps)
         {
             if (!IsInitialized) return;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _androidBridge.CallStatic("setVideoBitrate", kbps);
+#else
             HaishinKit_SetVideoBitrate(_nativeInstance, kbps);
+#endif
         }
 
         /// <summary>
@@ -371,7 +549,12 @@ namespace HaishinKit
         public void SetAudioBitrate(int kbps)
         {
             if (!IsInitialized) return;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _androidBridge.CallStatic("setAudioBitrate", kbps);
+#else
             HaishinKit_SetAudioBitrate(_nativeInstance, kbps);
+#endif
         }
 
         /// <summary>
@@ -380,7 +563,12 @@ namespace HaishinKit
         public void SetFrameRate(int fps)
         {
             if (!IsInitialized) return;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _androidBridge.CallStatic("setFrameRate", fps);
+#else
             HaishinKit_SetFrameRate(_nativeInstance, fps);
+#endif
         }
 
         #endregion
@@ -393,7 +581,12 @@ namespace HaishinKit
         public void SwitchCamera()
         {
             if (!IsInitialized) return;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            Debug.LogWarning("[HaishinKit] SwitchCamera is not supported on Android in texture mode");
+#else
             HaishinKit_SwitchCamera(_nativeInstance);
+#endif
         }
 
         /// <summary>
@@ -403,7 +596,12 @@ namespace HaishinKit
         public void SetZoom(float level)
         {
             if (!IsInitialized) return;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            Debug.LogWarning("[HaishinKit] SetZoom is not supported on Android in texture mode");
+#else
             HaishinKit_SetZoom(_nativeInstance, level);
+#endif
         }
 
         /// <summary>
@@ -412,7 +610,12 @@ namespace HaishinKit
         public void SetTorch(bool enabled)
         {
             if (!IsInitialized) return;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            Debug.LogWarning("[HaishinKit] SetTorch is not supported on Android in texture mode");
+#else
             HaishinKit_SetTorch(_nativeInstance, enabled);
+#endif
         }
 
         #endregion
@@ -426,7 +629,12 @@ namespace HaishinKit
         public void SetUseExternalAudio(bool enabled)
         {
             if (!IsInitialized) return;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _androidBridge.CallStatic("setUseExternalAudio", enabled);
+#else
             HaishinKit_SetUseExternalAudio(_nativeInstance, enabled);
+#endif
         }
 
         /// <summary>
@@ -439,7 +647,12 @@ namespace HaishinKit
         {
             if (!IsInitialized || samples == null || samples.Length == 0) return;
             int sampleCount = samples.Length / channels;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _androidBridge.CallStatic("sendAudioFrame", samples, sampleCount, channels, sampleRate);
+#else
             HaishinKit_SendAudioFrame(_nativeInstance, samples, sampleCount, channels, sampleRate);
+#endif
         }
 
         /// <summary>
@@ -453,7 +666,12 @@ namespace HaishinKit
         {
             if (!IsInitialized || samples == null || length == 0) return;
             int sampleCount = length / channels;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _androidBridge.CallStatic("sendAudioFrame", samples, sampleCount, channels, sampleRate);
+#else
             HaishinKit_SendAudioFrame(_nativeInstance, samples, sampleCount, channels, sampleRate);
+#endif
         }
 
         #endregion
