@@ -1,4 +1,4 @@
-// swift-tools-version: 5.10
+// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
@@ -24,7 +24,8 @@ let package = Package(
         .target(
             name: "HaishinKitUnity",
             dependencies: [
-                .product(name: "HaishinKit", package: "HaishinKit.swift")
+                .product(name: "HaishinKit", package: "HaishinKit.swift"),
+                .product(name: "RTMPHaishinKit", package: "HaishinKit.swift")
             ]
         ),
         .testTarget(

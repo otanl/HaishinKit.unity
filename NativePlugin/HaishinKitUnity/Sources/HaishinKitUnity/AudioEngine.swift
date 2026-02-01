@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import HaishinKit
+import RTMPHaishinKit
 
 /// オーディオエンジン - 無音オーディオと外部オーディオの処理を担当
 public class AudioEngine {
@@ -158,6 +159,6 @@ public class AudioEngine {
 // MARK: - StreamProvider Protocol
 
 /// RTMPStreamを提供するプロトコル
-public protocol StreamProvider: AnyObject {
+public protocol StreamProvider: AnyObject, Sendable {
     var currentStream: RTMPStream? { get }
 }

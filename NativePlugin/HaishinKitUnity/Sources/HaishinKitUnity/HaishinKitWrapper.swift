@@ -1,13 +1,15 @@
 import Foundation
 import AVFoundation
 import HaishinKit
+import RTMPHaishinKit
 import VideoToolbox
 
 // MARK: - HaishinKitWrapper Class
 
 /// Unity向けHaishinKitラッパークラス
 /// RTMP/SRTストリーミング機能を提供
-public class HaishinKitWrapper: StreamProvider {
+/// @unchecked Sendable: Unityからの呼び出しはUnityのメインスレッドで行われることを前提
+public final class HaishinKitWrapper: StreamProvider, @unchecked Sendable {
 
     // MARK: - Private Properties
 
@@ -140,7 +142,7 @@ public class HaishinKitWrapper: StreamProvider {
 
         Task {
             do {
-                _ = try await stream.publish(nil)
+                _ = try await stream.publish(nil as String?)
                 notifyStatus("stopped")
             } catch {
                 notifyStatus("stopped")
@@ -156,7 +158,7 @@ public class HaishinKitWrapper: StreamProvider {
         Task {
             var settings = await stream.videoSettings
             settings.bitRate = Int(bitrate) * 1000
-            await stream.setVideoSettings(settings)
+            try? await stream.setVideoSettings(settings)
         }
     }
 
@@ -166,13 +168,13 @@ public class HaishinKitWrapper: StreamProvider {
         Task {
             var settings = await stream.audioSettings
             settings.bitRate = Int(bitrate) * 1000
-            await stream.setAudioSettings(settings)
+            try? await stream.setAudioSettings(settings)
         }
     }
 
     public func setFrameRate(_ fps: Int32) {
         Task {
-            await mixer.setFrameRate(Float64(fps))
+            try? await mixer.setFrameRate(Float64(fps))
         }
     }
 
@@ -233,13 +235,13 @@ public class HaishinKitWrapper: StreamProvider {
 
         Task {
             do {
-                await stream.setVideoSettings(VideoCodecSettings(
+                try await stream.setVideoSettings(VideoCodecSettings(
                     videoSize: CGSize(width: Int(width), height: Int(height)),
                     bitRate: 2_000_000,
                     profileLevel: kVTProfileLevel_H264_Baseline_3_1 as String
                 ))
 
-                await stream.setAudioSettings(AudioCodecSettings(
+                try await stream.setAudioSettings(AudioCodecSettings(
                     bitRate: 128_000
                 ))
 
