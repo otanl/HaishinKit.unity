@@ -45,8 +45,21 @@ jobs:
       - name: Build macOS dylib (Universal)
         working-directory: NativePlugin/HaishinKitUnity
         run: |
-          swift build -c release --arch arm64 --arch x86_64
-          cp .build/release/libHaishinKitUnity.dylib ../../
+          echo "Building for arm64..."
+          swift build -c release --arch arm64 2>&1 | tail -100
+
+          echo "Building for x86_64..."
+          swift build -c release --arch x86_64 2>&1 | tail -100
+
+          echo "Creating universal binary..."
+          mkdir -p ../../artifacts
+          lipo -create \
+            .build/arm64-apple-macosx/release/libHaishinKitUnity.dylib \
+            .build/x86_64-apple-macosx/release/libHaishinKitUnity.dylib \
+            -output ../../libHaishinKitUnity.dylib
+
+          echo "Checking output..."
+          file ../../libHaishinKitUnity.dylib
 
       - name: Build iOS Framework
         working-directory: NativePlugin/HaishinKitUnity
