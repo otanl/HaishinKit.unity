@@ -130,7 +130,7 @@ jobs:
           # If no release, use existing AARs from repo
           if [ ! -f "android-aars/HaishinKitUnity.aar" ]; then
             echo "Using existing AARs from repository..."
-            cp UnityProject/Assets/Plugins/Android/*.aar android-aars/ 2>/dev/null || true
+            cp UnityProject/Assets/HaishinKit/Runtime/Plugins/Android/*.aar android-aars/ 2>/dev/null || true
           fi
 
           ls -la android-aars/
@@ -205,13 +205,19 @@ jobs:
             | macOS | `libHaishinKitUnity.dylib` | macOS dynamic library |
             | Android | `HaishinKitUnity-Android.zip` | Android AAR files |
 
-            ### Installation
+            ### Installation (UPM - Recommended)
 
-            1. Download the appropriate files for your target platform
-            2. Extract and copy to `Assets/Plugins/` in your Unity project
-               - iOS: `Assets/Plugins/iOS/HaishinKitUnity/HaishinKitUnity.framework`
-               - macOS: `Assets/Plugins/libHaishinKitUnity.dylib`
-               - Android: `Assets/Plugins/Android/*.aar`
+            Add to `Packages/manifest.json`:
+            ```json
+            "com.otanl.haishinkit": "https://github.com/otanl/HaishinKit.unity.git?path=UnityProject/Assets/HaishinKit#${{ steps.version.outputs.version }}"
+            ```
+
+            ### Manual Installation
+
+            Download and extract to your Unity project:
+            - iOS: `Assets/HaishinKit/Runtime/Plugins/iOS/`
+            - macOS: `Assets/HaishinKit/Runtime/Plugins/`
+            - Android: `Assets/HaishinKit/Runtime/Plugins/Android/`
 
             ### Dependencies
 
@@ -247,16 +253,16 @@ jobs:
       - name: Update Unity Plugins
         run: |
           # iOS Framework
-          rm -rf UnityProject/Assets/Plugins/iOS/HaishinKitUnity/HaishinKitUnity.framework
-          mkdir -p UnityProject/Assets/Plugins/iOS/HaishinKitUnity
-          unzip -o /tmp/artifacts/HaishinKitUnity-iOS.framework.zip -d UnityProject/Assets/Plugins/iOS/HaishinKitUnity/
+          rm -rf UnityProject/Assets/HaishinKit/Runtime/Plugins/iOS/HaishinKitUnity/HaishinKitUnity.framework
+          mkdir -p UnityProject/Assets/HaishinKit/Runtime/Plugins/iOS/HaishinKitUnity
+          unzip -o /tmp/artifacts/HaishinKitUnity-iOS.framework.zip -d UnityProject/Assets/HaishinKit/Runtime/Plugins/iOS/HaishinKitUnity/
 
           # macOS dylib
-          cp /tmp/artifacts/libHaishinKitUnity.dylib UnityProject/Assets/Plugins/
+          cp /tmp/artifacts/libHaishinKitUnity.dylib UnityProject/Assets/HaishinKit/Runtime/Plugins/
 
           # Android AARs
-          mkdir -p UnityProject/Assets/Plugins/Android
-          cp /tmp/artifacts/android/*.aar UnityProject/Assets/Plugins/Android/ 2>/dev/null || true
+          mkdir -p UnityProject/Assets/HaishinKit/Runtime/Plugins/Android
+          cp /tmp/artifacts/android/*.aar UnityProject/Assets/HaishinKit/Runtime/Plugins/Android/ 2>/dev/null || true
 
       - name: Update version file
         run: |
@@ -277,9 +283,9 @@ jobs:
             This PR updates the pre-built native plugins.
 
             ### Updated Files
-            - `UnityProject/Assets/Plugins/iOS/HaishinKitUnity/HaishinKitUnity.framework`
-            - `UnityProject/Assets/Plugins/libHaishinKitUnity.dylib`
-            - `UnityProject/Assets/Plugins/Android/*.aar`
+            - `UnityProject/Assets/HaishinKit/Runtime/Plugins/iOS/HaishinKitUnity/HaishinKitUnity.framework`
+            - `UnityProject/Assets/HaishinKit/Runtime/Plugins/libHaishinKitUnity.dylib`
+            - `UnityProject/Assets/HaishinKit/Runtime/Plugins/Android/*.aar`
 
             ---
             *Automatically generated from release workflow.*

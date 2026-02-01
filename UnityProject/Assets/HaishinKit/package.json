@@ -1,0 +1,35 @@
+{
+  "name": "com.otanl.haishinkit",
+  "version": "0.1.0",
+  "displayName": "HaishinKit",
+  "description": "Unity plugin for RTMP live streaming. Stream Unity's rendered content (RenderTexture) and game audio directly to YouTube Live, Twitch, and other RTMP servers.",
+  "unity": "2021.3",
+  "unityRelease": "0f1",
+  "documentationUrl": "https://github.com/otanl/HaishinKit.unity#readme",
+  "changelogUrl": "https://github.com/otanl/HaishinKit.unity/releases",
+  "licensesUrl": "https://github.com/otanl/HaishinKit.unity/blob/main/LICENSE",
+  "dependencies": {},
+  "keywords": [
+    "rtmp",
+    "streaming",
+    "live",
+    "broadcast",
+    "video",
+    "haishinkit"
+  ],
+  "author": {
+    "name": "otanl",
+    "url": "https://github.com/otanl"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/otanl/HaishinKit.unity.git"
+  },
+  "samples": [
+    {
+      "displayName": "Basic Streaming",
+      "description": "Basic texture and audio streaming example",
+      "path": "Samples~/BasicStreaming"
+    }
+  ]
+}

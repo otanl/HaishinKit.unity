@@ -51,12 +51,27 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed documentation.
 
 ## Installation
 
-### Option 1: Copy Assets
+### Option 1: Unity Package Manager (Recommended)
 
-1. Copy `UnityProject/Assets/HaishinKit` to your project's `Assets` folder
-2. Copy `UnityProject/Assets/Plugins` to your project's `Assets` folder
+Add to your `Packages/manifest.json`:
 
-### Option 2: Unity Package (Coming Soon)
+```json
+{
+  "dependencies": {
+    "com.otanl.haishinkit": "https://github.com/otanl/HaishinKit.unity.git?path=UnityProject/Assets/HaishinKit#v0.1.0"
+  }
+}
+```
+
+Or via Unity Editor:
+1. Window > Package Manager
+2. Click "+" > Add package from git URL
+3. Enter: `https://github.com/otanl/HaishinKit.unity.git?path=UnityProject/Assets/HaishinKit`
+
+### Option 2: Manual Installation
+
+1. Download the latest release from [Releases](https://github.com/otanl/HaishinKit.unity/releases)
+2. Copy `UnityProject/Assets/HaishinKit` to your project's `Assets` folder
 
 ## Quick Start
 

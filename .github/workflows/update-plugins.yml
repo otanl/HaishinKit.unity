@@ -115,16 +115,16 @@ jobs:
         run: |
           if [ -f "/tmp/swift-artifacts/HaishinKitUnity-iOS.framework.zip" ]; then
             echo "Updating iOS Framework..."
-            rm -rf UnityProject/Assets/Plugins/iOS/HaishinKitUnity/HaishinKitUnity.framework
-            mkdir -p UnityProject/Assets/Plugins/iOS/HaishinKitUnity
-            unzip -o /tmp/swift-artifacts/HaishinKitUnity-iOS.framework.zip -d UnityProject/Assets/Plugins/iOS/HaishinKitUnity/
+            rm -rf UnityProject/Assets/HaishinKit/Runtime/Plugins/iOS/HaishinKitUnity/HaishinKitUnity.framework
+            mkdir -p UnityProject/Assets/HaishinKit/Runtime/Plugins/iOS/HaishinKitUnity
+            unzip -o /tmp/swift-artifacts/HaishinKitUnity-iOS.framework.zip -d UnityProject/Assets/HaishinKit/Runtime/Plugins/iOS/HaishinKitUnity/
           fi
 
       - name: Update macOS dylib
         run: |
           if [ -f "/tmp/swift-artifacts/libHaishinKitUnity.dylib" ]; then
             echo "Updating macOS dylib..."
-            cp /tmp/swift-artifacts/libHaishinKitUnity.dylib UnityProject/Assets/Plugins/
+            cp /tmp/swift-artifacts/libHaishinKitUnity.dylib UnityProject/Assets/HaishinKit/Runtime/Plugins/
           fi
 
       - name: Upload Swift artifacts
@@ -132,8 +132,8 @@ jobs:
         with:
           name: swift-plugins
           path: |
-            UnityProject/Assets/Plugins/iOS/
-            UnityProject/Assets/Plugins/libHaishinKitUnity.dylib
+            UnityProject/Assets/HaishinKit/Runtime/Plugins/iOS/
+            UnityProject/Assets/HaishinKit/Runtime/Plugins/libHaishinKitUnity.dylib
 
   update-kotlin-plugins:
     needs: check-updates
@@ -163,25 +163,25 @@ jobs:
 
       - name: Update Android AARs
         run: |
-          mkdir -p UnityProject/Assets/Plugins/Android
+          mkdir -p UnityProject/Assets/HaishinKit/Runtime/Plugins/Android
 
           if [ -f "/tmp/kotlin-artifacts/HaishinKitUnity.aar" ]; then
-            cp /tmp/kotlin-artifacts/HaishinKitUnity.aar UnityProject/Assets/Plugins/Android/
+            cp /tmp/kotlin-artifacts/HaishinKitUnity.aar UnityProject/Assets/HaishinKit/Runtime/Plugins/Android/
           fi
 
           if [ -f "/tmp/kotlin-artifacts/haishinkit.aar" ]; then
-            cp /tmp/kotlin-artifacts/haishinkit.aar UnityProject/Assets/Plugins/Android/
+            cp /tmp/kotlin-artifacts/haishinkit.aar UnityProject/Assets/HaishinKit/Runtime/Plugins/Android/
           fi
 
           if [ -f "/tmp/kotlin-artifacts/rtmp.aar" ]; then
-            cp /tmp/kotlin-artifacts/rtmp.aar UnityProject/Assets/Plugins/Android/
+            cp /tmp/kotlin-artifacts/rtmp.aar UnityProject/Assets/HaishinKit/Runtime/Plugins/Android/
           fi
 
       - name: Upload Kotlin artifacts
         uses: actions/upload-artifact@v4
         with:
           name: kotlin-plugins
-          path: UnityProject/Assets/Plugins/Android/
+          path: UnityProject/Assets/HaishinKit/Runtime/Plugins/Android/
 
   create-pr:
     needs: [check-updates, update-swift-plugins, update-kotlin-plugins]
@@ -196,14 +196,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: swift-plugins
-          path: UnityProject/Assets/Plugins/
+          path: UnityProject/Assets/HaishinKit/Runtime/Plugins/
 
       - name: Download Kotlin plugins
         if: needs.update-kotlin-plugins.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: kotlin-plugins
-          path: UnityProject/Assets/Plugins/Android/
+          path: UnityProject/Assets/HaishinKit/Runtime/Plugins/Android/
 
       - name: Update version file
         run: |

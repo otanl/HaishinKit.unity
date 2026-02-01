@@ -1,116 +1,135 @@
 # HaishinKit Unity Plugin
 
-HaishinKit.swift を Unity から利用するためのネイティブプラグイン。
+> **Note**: This is an unofficial community project, not affiliated with the original HaishinKit authors.
 
-## セットアップ
+Unity plugin for RTMP live streaming, powered by [HaishinKit.swift](https://github.com/shogo4405/HaishinKit.swift) and [HaishinKit.kt](https://github.com/shogo4405/HaishinKit.kt).
 
-### 1. HaishinKitManager をシーンに追加
+## Installation
 
-空の GameObject を作成し、`HaishinKitManager` コンポーネントをアタッチします。
-または、スクリプトから自動作成されます。
+### Unity Package Manager (Git URL)
 
-```csharp
-// 自動作成される場合
-if (HaishinKitManager.Instance == null)
+Add to your `Packages/manifest.json`:
+
+```json
 {
-    var go = new GameObject("HaishinKitManager");
-    go.AddComponent<HaishinKitManager>();
+  "dependencies": {
+    "com.otanl.haishinkit": "https://github.com/otanl/HaishinKit.unity.git?path=UnityProject/Assets/HaishinKit#v0.1.0"
+  }
 }
 ```
 
-### 2. テスト用スクリプト
+Or via Unity Editor:
+1. Window > Package Manager
+2. "+" > Add package from git URL
+3. Enter: `https://github.com/otanl/HaishinKit.unity.git?path=UnityProject/Assets/HaishinKit`
 
-`HaishinKitTestScene.cs` を空の GameObject にアタッチすると、
-OnGUI でシンプルなテスト UI が表示されます。
+## Quick Start
 
-## 使用方法
+### Setup
 
 ```csharp
 using HaishinKit;
 
-// 接続
-HaishinKitManager.Instance.Connect("rtmp://your-server/app", "stream-key");
+// HaishinKitManager は自動的にシングルトンとして初期化されます
+var manager = HaishinKitManager.Instance;
 
-// 配信開始
-HaishinKitManager.Instance.StartPublishing();
-
-// 設定変更
-HaishinKitManager.Instance.SetVideoBitrate(1500);  // kbps
-HaishinKitManager.Instance.SetAudioBitrate(128);   // kbps
-HaishinKitManager.Instance.SetFrameRate(30);
-
-// カメラ操作
-HaishinKitManager.Instance.SwitchCamera();
-HaishinKitManager.Instance.SetZoom(2.0f);
-HaishinKitManager.Instance.SetTorch(true);
-
-// 配信停止
-HaishinKitManager.Instance.StopPublishing();
-
-// 切断
-HaishinKitManager.Instance.Disconnect();
+// イベント登録
+manager.OnConnected += () => Debug.Log("Connected");
+manager.OnPublishingStarted += () => Debug.Log("Streaming started");
+manager.OnError += (error) => Debug.LogError(error);
 ```
 
-## イベント
+### Texture Streaming (RenderTexture)
 
 ```csharp
-HaishinKitManager.Instance.OnConnected += () => Debug.Log("Connected");
-HaishinKitManager.Instance.OnDisconnected += () => Debug.Log("Disconnected");
-HaishinKitManager.Instance.OnPublishingStarted += () => Debug.Log("Publishing");
-HaishinKitManager.Instance.OnPublishingStopped += () => Debug.Log("Stopped");
-HaishinKitManager.Instance.OnError += (error) => Debug.LogError(error);
-HaishinKitManager.Instance.OnStatusChanged += (status) => Debug.Log(status);
+// RenderTexture を作成してカメラに割り当て
+var renderTexture = new RenderTexture(1280, 720, 24, RenderTextureFormat.BGRA32);
+Camera.main.targetTexture = renderTexture;
+
+// 接続
+manager.Connect("rtmp://your-server/live", "stream-key");
+
+// 接続完了後に配信開始
+manager.SetVideoBitrate(2000);  // kbps
+manager.SetAudioBitrate(128);   // kbps
+manager.StartPublishingWithTexture(1280, 720);
+
+// Update() でフレーム送信
+void Update()
+{
+    if (isPublishing)
+    {
+        manager.SendVideoFrame(renderTexture.GetNativeTexturePtr());
+    }
+}
 ```
 
-## iOS ビルド設定
+### Camera/Microphone Streaming (iOS)
 
-### 自動設定される項目（PostProcessBuild）
+```csharp
+// 接続
+manager.Connect("rtmp://your-server/live", "stream-key");
 
-- `NSCameraUsageDescription` - カメラ権限
-- `NSMicrophoneUsageDescription` - マイク権限
-- `ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES`
+// 配信開始
+manager.StartPublishing();
 
-### 手動確認が必要な項目
+// カメラ操作
+manager.SwitchCamera();
+manager.SetZoom(2.0f);
+manager.SetTorch(true);
 
-1. **Xcode > Target > General > Frameworks, Libraries, and Embedded Content**
-   - `HaishinKitUnity.framework` が "Embed & Sign" になっていること
+// 配信停止
+manager.StopPublishing();
+manager.Disconnect();
+```
 
-2. **Signing & Capabilities**
-   - 有効な Provisioning Profile が設定されていること
+## Platform Support
 
-## 対応プラットフォーム
+| Platform | Status | Notes |
+|----------|--------|-------|
+| iOS | ✅ | Metal texture streaming |
+| macOS | ✅ | Editor & Standalone |
+| Android | ✅ | Bitmap / OpenGL texture |
 
-- iOS 15.0+
-- ※ macOS Editor では動作しません（iOS 実機でテストしてください）
+## Requirements
 
-## API 一覧
+- Unity 2021.3+
+- iOS 15.0+ / macOS 12.0+
+- Android 5.0+ (API 21+)
 
-| メソッド | 説明 |
-|---------|------|
-| `Connect(url, streamName)` | RTMP サーバーに接続 |
-| `Disconnect()` | 切断 |
-| `StartPublishing()` | 配信開始 |
-| `StopPublishing()` | 配信停止 |
-| `SetVideoBitrate(kbps)` | ビデオビットレート設定 |
-| `SetAudioBitrate(kbps)` | オーディオビットレート設定 |
-| `SetFrameRate(fps)` | フレームレート設定 |
-| `SwitchCamera()` | カメラ切り替え |
-| `SetZoom(level)` | ズーム設定 (1.0-5.0) |
-| `SetTorch(enabled)` | トーチ設定 |
-| `GetVersion()` | バージョン取得 |
+## API Reference
 
-## トラブルシューティング
+| Method | Description |
+|--------|-------------|
+| `Connect(url, streamKey)` | Connect to RTMP server |
+| `Disconnect()` | Disconnect from server |
+| `StartPublishing()` | Start camera/mic streaming |
+| `StartPublishingWithTexture(w, h)` | Start texture streaming |
+| `SendVideoFrame(texturePtr)` | Send video frame |
+| `StopPublishing()` | Stop streaming |
+| `SetVideoBitrate(kbps)` | Set video bitrate |
+| `SetAudioBitrate(kbps)` | Set audio bitrate |
+| `SetFrameRate(fps)` | Set frame rate |
 
-### "DllNotFoundException" エラー
+## Troubleshooting
 
-iOS 実機でのみ動作します。Unity Editor では動作しません。
+### DllNotFoundException
 
-### 配信が開始されない
+Make sure native plugins are properly imported:
+- iOS: `Runtime/Plugins/iOS/HaishinKitUnity/HaishinKitUnity.framework`
+- macOS: `Runtime/Plugins/libHaishinKitUnity.dylib`
+- Android: `Runtime/Plugins/Android/*.aar`
 
-1. カメラ/マイク権限が許可されているか確認
-2. RTMP URL とストリームキーが正しいか確認
-3. `OnError` イベントでエラーメッセージを確認
+### Framework not found (iOS)
 
-### Framework が見つからない
+In Xcode, check Framework embed settings:
+Target > General > Frameworks, Libraries, and Embedded Content > "Embed & Sign"
 
-Xcode で Framework の Embed 設定を確認してください。
+## License
+
+BSD 3-Clause License. See [LICENSE](https://github.com/otanl/HaishinKit.unity/blob/main/LICENSE).
+
+## Credits
+
+- [HaishinKit.swift](https://github.com/shogo4405/HaishinKit.swift) by [@shogo4405](https://github.com/shogo4405)
+- [HaishinKit.kt](https://github.com/shogo4405/HaishinKit.kt) by [@shogo4405](https://github.com/shogo4405)

@@ -25,10 +25,14 @@
 │                    otanl/HaishinKit.unity                       │
 │                                                                 │
 │  NativePlugin/HaishinKitUnity/     ← iOS/macOS Swift Package    │
-│  UnityProject/Assets/                                           │
-│    ├── Plugins/iOS/                ← Framework (自動ビルド)     │
-│    ├── Plugins/Android/            ← AAR (HaishinKit.ktから)    │
-│    └── HaishinKit/Scripts/         ← C# 統一API                 │
+│  UnityProject/Assets/HaishinKit/   ← UPM パッケージ             │
+│    ├── package.json                ← UPM 定義                   │
+│    ├── Runtime/                    ← C# API + ネイティブ        │
+│    │   ├── Plugins/iOS/            ← Framework (自動ビルド)     │
+│    │   ├── Plugins/Android/        ← AAR (HaishinKit.ktから)    │
+│    │   └── *.cs                    ← C# 統一API                 │
+│    ├── Editor/                     ← Editor スクリプト          │
+│    └── Samples~/                   ← サンプル (オプション)      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
