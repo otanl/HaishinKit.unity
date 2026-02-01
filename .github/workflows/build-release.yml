@@ -11,6 +11,10 @@ on:
         required: true
         default: 'v0.0.0-dev'
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   build-ios-macos:
     runs-on: macos-15
