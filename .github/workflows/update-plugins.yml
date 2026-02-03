@@ -1,7 +1,7 @@
 name: Update Native Plugins
 
 on:
-  # 手動トリガー
+  # 手動トリガーのみ
   workflow_dispatch:
     inputs:
       swift_release:
@@ -12,10 +12,6 @@ on:
         description: 'HaishinKit.kt release tag (empty for latest)'
         required: false
         default: ''
-
-  # 毎日UTC 0時（JST 9時）にチェック
-  schedule:
-    - cron: '0 0 * * *'
 
 env:
   SWIFT_REPO: otanl/HaishinKit.swift
