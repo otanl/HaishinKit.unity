@@ -1,6 +1,6 @@
 {
   "name": "com.otanl.haishinkit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "HaishinKit",
   "description": "Unity plugin for RTMP live streaming. Stream Unity's rendered content (RenderTexture) and game audio directly to YouTube Live, Twitch, and other RTMP servers.",
   "unity": "2021.3",
