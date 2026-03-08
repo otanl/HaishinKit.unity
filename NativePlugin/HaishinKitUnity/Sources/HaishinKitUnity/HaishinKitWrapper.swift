@@ -7,7 +7,7 @@ import VideoToolbox
 // MARK: - HaishinKitWrapper Class
 
 /// Unity向けHaishinKitラッパークラス
-/// RTMP/SRTストリーミング機能を提供
+/// RTMPストリーミング機能を提供
 /// @unchecked Sendable: Unityからの呼び出しはUnityのメインスレッドで行われることを前提
 public final class HaishinKitWrapper: StreamProvider, @unchecked Sendable {
 

@@ -13,14 +13,27 @@ Stream Unity's rendered content (RenderTexture) and game audio directly to YouTu
 - **Camera Streaming**: Direct camera/microphone streaming (iOS)
 - **Real-time Control**: Bitrate, frame rate, zoom, torch control
 - **Cross-Platform**: Unified C# API for iOS, macOS, and Android
+- **State Management**: Typed `StreamingStatus` enum with state machine
+- **Diagnostics**: Real-time streaming statistics and audio capture metrics
 
 ## Platform Support
 
 | Platform | Status | Notes |
 |----------|--------|-------|
-| iOS | ✅ Supported | Metal texture streaming |
-| macOS | ✅ Supported | Editor & Standalone |
-| Android | ✅ Supported | Bitmap / OpenGL texture |
+| iOS | Supported | Metal texture streaming |
+| macOS | Supported | Editor & Standalone |
+| Android | Supported | ReadPixels / AsyncGPU / NativeTexture |
+
+### Platform Capabilities
+
+| Feature | iOS | macOS | Android |
+|---------|-----|-------|---------|
+| Texture Streaming | Metal | Metal | ReadPixels / AsyncGPU / NativeTexture |
+| Camera Streaming | Yes | Yes | No (texture mode only) |
+| Game Audio | Yes | Yes | Yes |
+| SwitchCamera | Yes | Yes | N/A |
+| Zoom / Torch | Yes | N/A | N/A |
+| Native Texture (zero-copy) | Yes (Metal) | Yes (Metal) | OpenGL ES only |
 
 ## Requirements
 
@@ -36,15 +49,15 @@ This project consists of three related repositories:
 
 ```
 HaishinKit.swift (fork)     HaishinKit.kt (fork)
-      │                            │
-      │ unity-support              │ unity-support
-      │ branch                     │ branch (unity/ module)
-      ▼                            ▼
-┌─────────────────────────────────────────────┐
-│           HaishinKit.unity                  │
-│  ├── NativePlugin/      (Swift source)      │
-│  └── UnityProject/      (C# + binaries)     │
-└─────────────────────────────────────────────┘
+      |                            |
+      | unity-support              | unity-support
+      | branch                     | branch (unity/ module)
+      v                            v
++---------------------------------------------+
+|           HaishinKit.unity                  |
+|  +-- NativePlugin/      (Swift source)      |
+|  +-- UnityProject/      (C# + binaries)     |
++---------------------------------------------+
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed documentation.
@@ -87,15 +100,26 @@ public class MyStreaming : MonoBehaviour
 
     void Start()
     {
+        // HaishinKitManager is auto-created via RuntimeInitializeOnLoadMethod
         _manager = HaishinKitManager.Instance;
 
         // Create RenderTexture and assign to camera
         _renderTexture = new RenderTexture(1280, 720, 24, RenderTextureFormat.BGRA32);
         Camera.main.targetTexture = _renderTexture;
 
-        // Setup events
-        _manager.OnConnected += () => Debug.Log("Connected");
-        _manager.OnPublishingStarted += () => Debug.Log("Streaming started");
+        // Setup events (enum-based, recommended)
+        _manager.OnStreamingStatusChanged += (status) =>
+        {
+            Debug.Log($"Status: {status}");
+            if (status == StreamingStatus.Connected)
+            {
+                _manager.SetVideoBitrate(2000);
+                _manager.StartPublishingWithTexture(1280, 720);
+            }
+        };
+
+        // Or use individual events
+        _manager.OnError += (error) => Debug.LogError(error);
     }
 
     public void StartStreaming()
@@ -103,18 +127,15 @@ public class MyStreaming : MonoBehaviour
         _manager.Connect("rtmp://your-server/live", "stream-key");
     }
 
-    public void OnConnectedToServer()
-    {
-        _manager.SetVideoBitrate(2000); // kbps
-        _manager.SetAudioBitrate(128);  // kbps
-        _manager.StartPublishingWithTexture(1280, 720);
-    }
-
     void Update()
     {
-        if (_isPublishing)
+        if (_manager.Status == StreamingStatus.Publishing)
         {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _manager.SendVideoFrame(_renderTexture);
+#else
             _manager.SendVideoFrame(_renderTexture.GetNativeTexturePtr());
+#endif
         }
     }
 }
@@ -125,17 +146,22 @@ public class MyStreaming : MonoBehaviour
 Audio is automatically captured when `AudioStreamCapture` is attached to the same GameObject as `AudioListener`:
 
 ```csharp
-// AudioStreamCapture is auto-added by TextureStreamingTest
-// Or manually add it to your AudioListener's GameObject
 var audioCapture = audioListenerObject.AddComponent<AudioStreamCapture>();
 audioCapture.StartCapture(); // Call when publishing starts
 audioCapture.StopCapture();  // Call when publishing stops
+
+// Monitor audio stats
+var stats = audioCapture.GetStats();
+Debug.Log($"Sent: {stats.SentFrames}, Overruns: {stats.BufferOverruns}");
 ```
 
 ## Sample Scenes
 
-- `TextureStreamingTest`: Complete example for streaming Unity rendering
-- `HaishinKitTestScene`: Basic camera/microphone streaming test
+Import samples via Package Manager > HaishinKit > Samples:
+
+- **Texture Streaming**: Complete example for streaming Unity rendering with stats display
+- **Camera Streaming**: Camera/microphone streaming with UI controls (iOS/macOS)
+- **Audio Only**: Minimal audio-only streaming example
 
 ## Building Native Plugins
 
@@ -195,16 +221,44 @@ cp rtmp/build/outputs/aar/rtmp-release.aar /path/to/HaishinKit.unity/UnityProjec
 
 ### HaishinKitManager
 
-| Method | Description |
-|--------|-------------|
+| Property/Method | Description |
+|-----------------|-------------|
+| `Instance` | Singleton instance (auto-created) |
+| `Status` | Current streaming status (`StreamingStatus` enum) |
+| `Stats` | Real-time streaming statistics |
+| `IsInitialized` | Whether the native backend is ready |
 | `Connect(url, streamKey)` | Connect to RTMP server |
 | `Disconnect()` | Disconnect from server |
 | `StartPublishingWithTexture(width, height)` | Start texture streaming |
-| `SendVideoFrame(texturePtr)` | Send video frame |
+| `SendVideoFrame(texturePtr)` | Send video frame (iOS/macOS Metal pointer) |
+| `SendVideoFrame(renderTexture)` | Send video frame (cross-platform) |
 | `StopPublishing()` | Stop streaming |
 | `SetVideoBitrate(kbps)` | Set video bitrate |
 | `SetAudioBitrate(kbps)` | Set audio bitrate |
 | `SetFrameRate(fps)` | Set frame rate |
+
+#### Events
+
+| Event | Description |
+|-------|-------------|
+| `OnStreamingStatusChanged` | `Action<StreamingStatus>` - typed status changes |
+| `OnStatusChanged` | `Action<string>` - raw status string (backward compatible) |
+| `OnConnected` | Fired when connected to server |
+| `OnDisconnected` | Fired when disconnected |
+| `OnPublishingStarted` | Fired when publishing starts |
+| `OnPublishingStopped` | Fired when publishing stops |
+| `OnError` | `Action<string>` - error message |
+
+#### StreamingStatus Enum
+
+| Value | Description |
+|-------|-------------|
+| `Disconnected` | Not connected |
+| `Connecting` | Connection in progress |
+| `Connected` | Connected, not publishing |
+| `Publishing` | Actively streaming |
+| `Stopping` | Stop in progress |
+| `Error` | Error occurred |
 
 ### AudioStreamCapture
 
@@ -214,6 +268,23 @@ cp rtmp/build/outputs/aar/rtmp-release.aar /path/to/HaishinKit.unity/UnityProjec
 | `StartCapture()` | Start audio capture |
 | `StopCapture()` | Stop audio capture |
 | `IsCapturing` | Check if capturing |
+| `GetStats()` | Get `AudioCaptureStats` (captured, sent, overruns, dropped, queue depth) |
+
+#### Inspector Settings
+
+| Setting | Description |
+|---------|-------------|
+| `Max Buffer Size Override` | 0 = auto from AudioSettings.dspBufferSize |
+| `Max Sends Per Frame` | Limit audio sends per frame (default: 8, 0 = unlimited) |
+| `Drop Policy` | `None` (process all) or `DropOldest` (low latency) |
+| `Max Queue Size` | Max buffers when using DropOldest policy |
+
+### Android-specific
+
+| Method | Description |
+|--------|-------------|
+| `SetAndroidReadbackMode(mode)` | Set readback mode: ReadPixels, AsyncGPUReadback, NativeTexture, NativePlugin |
+| `SetTargetSendFps(fps)` | Throttle video frame sending (0 = every frame) |
 
 ## Related Repositories
 
@@ -236,5 +307,7 @@ This project would not be possible without the excellent work of [@shogo4405](ht
 
 - [HaishinKit.swift](https://github.com/shogo4405/HaishinKit.swift) - The core iOS/macOS RTMP/SRT streaming library
 - [HaishinKit.kt](https://github.com/shogo4405/HaishinKit.kt) - The Android RTMP streaming library
+
+> Note: The upstream HaishinKit libraries support RTMP and SRT protocols. This Unity plugin currently supports RTMP only.
 
 All streaming functionality is provided by these libraries. This project only provides Unity bindings and does not modify the core streaming logic.

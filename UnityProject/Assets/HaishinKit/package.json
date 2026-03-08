@@ -27,9 +27,19 @@
   },
   "samples": [
     {
-      "displayName": "Basic Streaming",
-      "description": "Basic texture and audio streaming example",
-      "path": "Samples~/BasicStreaming"
+      "displayName": "Texture Streaming",
+      "description": "Stream Unity rendering via RenderTexture with audio",
+      "path": "Samples~/TextureStreaming"
+    },
+    {
+      "displayName": "Camera Streaming",
+      "description": "Stream device camera/microphone (iOS/macOS)",
+      "path": "Samples~/CameraStreaming"
+    },
+    {
+      "displayName": "Audio Only",
+      "description": "Stream game audio only",
+      "path": "Samples~/AudioOnly"
     }
   ]
 }
